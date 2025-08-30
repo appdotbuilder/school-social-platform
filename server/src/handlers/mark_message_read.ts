@@ -1,15 +1,53 @@
+import { db } from '../db';
+import { privateMessagesTable } from '../db/schema';
 import { type MarkMessageReadInput } from '../schema';
+import { eq, and } from 'drizzle-orm';
 
 export async function markMessageRead(input: MarkMessageReadInput, userId: number): Promise<void> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is marking a private message as read,
-  // ensuring the user is the recipient of the message before updating.
-  return Promise.resolve();
+  try {
+    // Verify the message exists and the user is the recipient
+    const message = await db.select()
+      .from(privateMessagesTable)
+      .where(eq(privateMessagesTable.id, input.message_id))
+      .limit(1)
+      .execute();
+
+    if (message.length === 0) {
+      throw new Error('Message not found');
+    }
+
+    if (message[0].recipient_id !== userId) {
+      throw new Error('Unauthorized: You can only mark your own messages as read');
+    }
+
+    // Mark the message as read
+    await db.update(privateMessagesTable)
+      .set({ is_read: true })
+      .where(eq(privateMessagesTable.id, input.message_id))
+      .execute();
+
+  } catch (error) {
+    console.error('Mark message read failed:', error);
+    throw error;
+  }
 }
 
 export async function markAllMessagesRead(senderId: number, recipientId: number): Promise<void> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is marking all messages from a specific sender as read
-  // for the recipient user.
-  return Promise.resolve();
+  try {
+    // Mark all unread messages from the sender to the recipient as read
+    await db.update(privateMessagesTable)
+      .set({ is_read: true })
+      .where(
+        and(
+          eq(privateMessagesTable.sender_id, senderId),
+          eq(privateMessagesTable.recipient_id, recipientId),
+          eq(privateMessagesTable.is_read, false)
+        )
+      )
+      .execute();
+
+  } catch (error) {
+    console.error('Mark all messages read failed:', error);
+    throw error;
+  }
 }
